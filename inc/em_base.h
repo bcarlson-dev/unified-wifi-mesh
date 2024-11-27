@@ -2197,7 +2197,6 @@ typedef struct {
     unsigned int    r_pub_len;
     EVP_PKEY *pkey;
     EVP_PKEY_CTX *kctx;
-    DH *dh;
 } em_crypto_info_t;
 
 
