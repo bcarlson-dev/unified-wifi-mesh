@@ -150,8 +150,8 @@ int em_crypto_t::init()
     }
 
     // Get private and public keys (pre 3.0)
-    DH_get0_key(dh, &pub_key, &priv_key);
-    DH_get0_key(dh, &pub_key, &priv_key);
+    DH_get0_key(dh, (const BIGNUM**)&pub_key, (const BIGNUM**)&priv_key);
+    DH_get0_key(dh, (const BIGNUM**)&pub_key, (const BIGNUM**)&priv_key);
 #else
     /* Create DH context */
     dh_ctx = EVP_PKEY_CTX_new_from_name(NULL, "DH", NULL);
@@ -227,6 +227,7 @@ uint8_t em_crypto_t::platform_hash(const EVP_MD * hashing_algo, uint8_t num_elem
         return 0;
     }
 #else
+    // OpenSSL 1.0.x uses a stack allocated context
     EVP_MD_CTX  ctx_aux;
     ctx = &ctx_aux;
 
@@ -279,6 +280,7 @@ uint8_t em_crypto_t::platform_hmac_hash(const EVP_MD * hashing_algo, uint8_t *ke
 #elif OPENSSL_VERSION_NUMBER >= 0x10100000L
     ctx = HMAC_CTX_new();
 #else
+    // OpenSSL 1.0.x uses a stack allocated context
     HMAC_CTX  ctx_aux;
     ctx = &ctx_aux;
 
@@ -411,13 +413,12 @@ uint8_t em_crypto_t::platform_cipher_encrypt(const EVP_CIPHER *cipher_type, uint
     if (cipher_type == NULL){
         return 0;
     }
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-    EVP_CIPHER_CTX _ctx;
-#endif
     EVP_CIPHER_CTX *ctx;
     int             len = plain_len + AES_BLOCK_SIZE - 1, final_len = 0;
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
+    // OpenSSL 1.0.x uses a stack allocated context
+    EVP_CIPHER_CTX _ctx;
     EVP_CIPHER_CTX_init(&_ctx);
     ctx = &_ctx;
 #else
@@ -458,15 +459,13 @@ uint8_t em_crypto_t::platform_cipher_decrypt(const EVP_CIPHER *cipher_type, uint
     if (cipher_type == NULL){
         return 0;
     }
-
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-    EVP_CIPHER_CTX _ctx;
-#endif
     EVP_CIPHER_CTX *ctx;
     int             plen, len;
     uint8_t         buf[AES_BLOCK_SIZE];
 
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
+    // OpenSSL 1.0.x uses a stack allocated context
+    EVP_CIPHER_CTX _ctx;
     EVP_CIPHER_CTX_init(&_ctx);
     ctx = &_ctx;
 #else
@@ -563,8 +562,8 @@ bail:
     OSSL_PARAM_BLD_free(param_bld);
 
     return NULL;
-}
 #endif
+}
 
 
 uint8_t em_crypto_t::platform_compute_shared_secret(uint8_t **shared_secret, uint16_t *shared_secret_len,
@@ -671,8 +670,17 @@ uint8_t em_crypto_t::compute_secret_internal(BIGNUM *p, BIGNUM *g, BIGNUM *bn_pr
         return 0;
     }
 #endif
-
-    *shared_secret = (uint8_t*)calloc(DH_size(dh), sizeof(uint8_t));
+    int size = DH_size(dh);
+    if (size <= 0) {
+        DH_free(dh);
+        return 0;
+    }
+    *shared_secret = (uint8_t*)calloc(size, sizeof(uint8_t));
+    if (!*shared_secret) {
+        // Memory allocation failed
+        DH_free(dh);
+        return 0;
+    }
     *secret_len = DH_compute_key(*shared_secret, bn_pub, dh);
     
     DH_free(dh);
