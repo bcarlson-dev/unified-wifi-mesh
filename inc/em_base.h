@@ -268,11 +268,18 @@ typedef enum {
 } em_profile_type_t;
 
 typedef enum {
-    em_freq_band_24,
+    em_freq_band_24,    //IEEE-1905-1-2013 table 6-23
     em_freq_band_5,
     em_freq_band_60,
     em_freq_band_unknown
 } em_freq_band_t;
+
+typedef enum {
+    em_rd_freq_band_unknown,    //rf band based on Wi-Fi Simple Configuration Technical Specification v2 table 44
+    em_rd_freq_band_24,
+    em_rd_freq_band_5,
+    em_rd_freq_band_60 = 0x4,
+} em_rd_freq_band_t;
 
 typedef struct {
     unsigned int    bit_map;
@@ -1678,7 +1685,7 @@ typedef enum {
     em_state_agent_ap_cap_report,
     em_state_agent_client_cap_report,
     em_state_agent_channel_pref_query,
-
+    em_state_agent_sta_link_metrics,
 
     em_state_ctrl_unconfigured = 0x100,
     em_state_ctrl_wsc_m1_pending,
@@ -2062,6 +2069,7 @@ typedef struct {
 	mac_address_t dev_id;
     em_long_string_t net_id;
     bool    enabled;
+    em_freq_band_t band;
     em_media_spec_data_t	media_data;
     unsigned  int   number_of_bss;
     unsigned  int   number_of_unassoc_sta;
@@ -2234,9 +2242,10 @@ typedef enum {
     em_bus_event_type_onewifi_private_cb,
     em_bus_event_type_onewifi_radio_cb,
     em_bus_event_type_m2ctrl_configuration,
-	em_bus_event_type_sta_assoc,
-	em_bus_event_type_channel_pref_query,
-	em_bus_event_type_channel_sel_req,
+    em_bus_event_type_sta_assoc,
+    em_bus_event_type_channel_pref_query,
+    em_bus_event_type_channel_sel_req,
+    em_bus_event_type_sta_link_metrics
 } em_bus_event_type_t;
 
 typedef struct {
@@ -2309,6 +2318,7 @@ typedef enum {
     dm_orch_type_channel_pref,
     dm_orch_type_channel_sel,
     dm_orch_type_channel_cnf,
+    dm_orch_type_channel_sel_resp,
     dm_orch_type_sta_cap,
     dm_orch_type_sta_link_metrics,
     dm_orch_type_op_channel_report,
@@ -2322,25 +2332,26 @@ typedef struct {
 } em_orch_desc_t;
 
 typedef enum {
-	db_cfg_type_none,
-	db_cfg_type_network_list_update = (1 << 0),
-	db_cfg_type_network_list_delete = (1 << 1),
-	db_cfg_type_device_list_update = (1 << 2),
-	db_cfg_type_device_list_delete = (1 << 3),
-	db_cfg_type_radio_list_update = (1 << 4),
-	db_cfg_type_radio_list_delete = (1 << 5),
-	db_cfg_type_op_class_list_update = (1 << 6),
-	db_cfg_type_op_class_list_delete = (1 << 7),
-	db_cfg_type_bss_list_update = (1 << 8),
-	db_cfg_type_bss_list_delete = (1 << 9),
-	db_cfg_type_sta_list_update = (1 << 10),
-	db_cfg_type_sta_list_delete = (1 << 11),
-	db_cfg_type_network_ssid_list_update = (1 << 12),
-	db_cfg_type_network_ssid_list_delete = (1 << 13),
-	db_cfg_type_radio_cap_list_update = (1 << 14),
-	db_cfg_type_radio_cap_list_delete = (1 << 15),
-	db_cfg_type_1905_security_list_update = (1 << 16),
-	db_cfg_type_1905_security_list_delete = (1 << 17),
+    db_cfg_type_none,
+    db_cfg_type_network_list_update = (1 << 0),
+    db_cfg_type_network_list_delete = (1 << 1),
+    db_cfg_type_device_list_update = (1 << 2),
+    db_cfg_type_device_list_delete = (1 << 3),
+    db_cfg_type_radio_list_update = (1 << 4),
+    db_cfg_type_radio_list_delete = (1 << 5),
+    db_cfg_type_op_class_list_update = (1 << 6),
+    db_cfg_type_op_class_list_delete = (1 << 7),
+    db_cfg_type_bss_list_update = (1 << 8),
+    db_cfg_type_bss_list_delete = (1 << 9),
+    db_cfg_type_sta_list_update = (1 << 10),
+    db_cfg_type_sta_list_delete = (1 << 11),
+    db_cfg_type_network_ssid_list_update = (1 << 12),
+    db_cfg_type_network_ssid_list_delete = (1 << 13),
+    db_cfg_type_radio_cap_list_update = (1 << 14),
+    db_cfg_type_radio_cap_list_delete = (1 << 15),
+    db_cfg_type_1905_security_list_update = (1 << 16),
+    db_cfg_type_1905_security_list_delete = (1 << 17),
+    db_cfg_type_sta_metrics_update = (1 << 18)
 } db_cfg_type_t;
 
 typedef struct{

@@ -196,7 +196,7 @@ public:
     char *get_primary_device_type() { return m_device.get_primary_device_type(); }
 
     unsigned short get_msg_id() { return msg_id; }
-    unsigned short set_msg_id(unsigned short id) { msg_id = id; }
+    void set_msg_id(unsigned short id) { msg_id = id; }
 
     void set_manufacturer(char *manufacturer) { m_device.set_manufacturer(manufacturer); }
     void set_manufacturer_model(char *model) { m_device.set_manufacturer_model(model); }
@@ -223,6 +223,7 @@ public:
     dm_sta_t *get_first_sta(mac_address_t sta_mac);
     dm_sta_t *get_next_sta(mac_address_t sta_mac, dm_sta_t *psta);
     bool has_at_least_one_associated_sta();
+    int get_num_bss_for_associated_sta(mac_address_t sta_mac);
     
     static void print_hex_dump(unsigned int length, unsigned char *buffer);
     static char *hex(unsigned int in_len, unsigned char *in, unsigned int out_len, char *out);
