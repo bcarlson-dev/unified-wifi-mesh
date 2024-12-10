@@ -1,19 +1,24 @@
 #include "ec_session.h"
 #include "em_crypto.h"
 
-int ec_session_t::compute_intermediate_key(bool first)
+int ec_session_t::compute_intermediate_key(bool is_first)
 {       
     unsigned int primelen, offset, keylen;
-    unsigned char m[2048];
+    
 
-    BIGNUM *x = (first == true)?m_params.m:m_params.n;
-    const char *info = (first == true)?"first intermediate key":"second intermediate key";
-    unsigned char *key = (first == true)?m_params.k1:m_params.k2;
+    BIGNUM *x = is_first ? m_params.m : m_params.n;
+    const char *info = is_first ? "first intermediate key" : "second intermediate key";
+
+    // The key to store
+    unsigned char *key = is_first ? m_params.k1 : m_params.k2;
 
     primelen = BN_num_bytes(m_params.prime);
 
+    unsigned char m[2048];
     memset(m, 0, primelen);
+
     offset = primelen - BN_num_bytes(x);
+
     BN_bn2bin(x, m + offset);
     if ((keylen = hkdf(m_params.hashfcn, 0, m, primelen, NULL, 0, 
                     (unsigned char *)info, strlen(info),
@@ -141,6 +146,7 @@ EC_KEY *ec_session_t::get_responder_boot_key(unsigned char *asn1_key, unsigned i
     // Clear the buffer before use
     memset(key, 0, *len);
 
+    // Begin fetching the responder public key
 
     if ((*len = EVP_DecodeBlock(key, (unsigned char *)m_data.rPubKey, strlen(m_data.rPubKey))) < 0) {
         m_activation_status = ActStatus_Failed;
@@ -179,6 +185,7 @@ EC_KEY *ec_session_t::get_initiator_boot_key(unsigned char *asn1_key, unsigned i
         len = asn1_len;
     }
 
+    // Begin fetching the initiator public key
 
     // Clear the buffer before use
     memset(key, 0, *len);
@@ -195,6 +202,7 @@ EC_KEY *ec_session_t::get_initiator_boot_key(unsigned char *asn1_key, unsigned i
 
     return initiator_boot_key;
 }
+
 
 int ec_session_t::hkdf (const EVP_MD *h, int skip, unsigned char *ikm, int ikmlen,
         unsigned char *salt, int saltlen, unsigned char *info, int infolen,

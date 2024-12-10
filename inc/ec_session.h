@@ -45,7 +45,7 @@ class ec_session_t {
     int compute_key_hash(EC_KEY *key, unsigned char *digest, const char *prefix = NULL);
 
 
-    int compute_intermediate_key(bool first);
+    int compute_intermediate_key(bool is_first);
     int set_auth_frame_wrapped_data(ec_frame_t *frame, unsigned int non_wrapped_len, bool auth_init);
 
     /**
