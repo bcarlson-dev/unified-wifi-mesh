@@ -46,25 +46,24 @@
 
 int ec_session_t::create_auth_req(unsigned char *buff)
 {
-    unsigned char keyasn1[1024];
+
     EC_KEY *responder_boot_key, *initiator_boot_key;
     unsigned int wrapped_len;
-    ec_frame_t    *frame;
-    ec_tlv_t *tlv;
-    unsigned short tlv_len, chann_attr;;
+
+    unsigned short attrib_len, chann_attr;;
     unsigned char protocol_key_buff[1024];
     ULONG hm_channel = 0;
     ULONG ch_freq = 0;
 
     printf("%s:%d Enter\n", __func__, __LINE__);
 
-    frame = (ec_frame_t *)buff;
-    tlv_len = 0;
+    ec_frame_t    *frame = (ec_frame_t *)buff;
+    attrib_len = 0;
 
-    prepare_frame(frame, ec_frame_type_auth_req);
+    frame->frame_type = ec_frame_type_auth_req; 
 
-    responder_boot_key = get_responder_boot_key(keyasn1, sizeof(keyasn1));
-    initiator_boot_key = get_initiator_boot_key(keyasn1, sizeof(keyasn1));
+    responder_boot_key = get_responder_boot_key();
+    initiator_boot_key = get_initiator_boot_key();
 
     if (init_session() != 0) {
         m_activation_status = ActStatus_Failed;
@@ -78,16 +77,15 @@ int ec_session_t::create_auth_req(unsigned char *buff)
         return -1;
     }
 
-    tlv = (ec_tlv_t *)frame->body.attrib;
+    uint8_t* attribs = frame->attributes;
 
     if (compute_key_hash(initiator_boot_key, m_params.initiator_keyhash) < 1) {
         m_activation_status = ActStatus_Failed;
         return -1;
     }
 
-    tlv = set_tlv((unsigned char *)tlv, ec_attrib_id_initiator_boot_hash, 
-            SHA256_DIGEST_LENGTH, m_params.initiator_keyhash);
-    tlv_len += (SHA256_DIGEST_LENGTH + 4);
+    attribs = add_attrib(attribs, ec_attrib_id_init_bootstrap_key_hash, SHA256_DIGEST_LENGTH, m_params.initiator_keyhash);
+    attrib_len += get_ec_attr_size(SHA256_DIGEST_LENGTH);
 
     if (compute_key_hash(responder_boot_key, m_params.responder_keyhash) < 1) {
         m_activation_status = ActStatus_Failed;
@@ -95,32 +93,32 @@ int ec_session_t::create_auth_req(unsigned char *buff)
         return -1;
     }
 
-    tlv = set_tlv((unsigned char *)tlv, ec_attrib_id_responder_boot_hash, 
-            SHA256_DIGEST_LENGTH, m_params.responder_keyhash);
-    tlv_len += (SHA256_DIGEST_LENGTH + 4);
+    attribs = add_attrib(attribs, ec_attrib_id_resp_bootstrap_key_hash, SHA256_DIGEST_LENGTH, m_params.responder_keyhash);
+    attrib_len += get_ec_attr_size(SHA256_DIGEST_LENGTH);
 
     if (m_cfgrtr_ver > 1) {
-        tlv = set_tlv((unsigned char *)tlv, ec_attrib_id_proto_version, sizeof(m_cfgrtr_ver), &m_cfgrtr_ver);
-        tlv_len += (sizeof(m_cfgrtr_ver) + 4);
+        attribs = add_attrib(attribs, ec_attrib_id_proto_version, sizeof(m_cfgrtr_ver), &m_cfgrtr_ver);
+        attrib_len += get_ec_attr_size(sizeof(m_cfgrtr_ver));
     }
 
     BN_bn2bin((const BIGNUM *)m_params.x,
             &protocol_key_buff[BN_num_bytes(m_params.prime) - BN_num_bytes(m_params.x)]);
     BN_bn2bin((const BIGNUM *)m_params.y,
             &protocol_key_buff[2*BN_num_bytes(m_params.prime) - BN_num_bytes(m_params.x)]);
-    tlv = set_tlv((unsigned char *)tlv, ec_attrib_id_initiator_protocol_key, 2*BN_num_bytes(m_params.prime), protocol_key_buff);
-    tlv_len += (2*BN_num_bytes(m_params.prime) + 4);
+
+    attribs = add_attrib(attribs, ec_attrib_id_init_proto_key, 2*BN_num_bytes(m_params.prime), protocol_key_buff);
+    attrib_len += get_ec_attr_size(2*BN_num_bytes(m_params.prime));
 
     chann_attr = freq_to_channel(channel_to_frequency(hm_channel)); //channel attrib shall be home channel
-    tlv = set_tlv((unsigned char*)tlv, ec_attrib_id_channel, sizeof(unsigned short), (unsigned char *)&chann_attr);
-    tlv_len += 6;
+    attribs = add_attrib(attribs, ec_attrib_id_channel, sizeof(unsigned short), (unsigned char *)&chann_attr);
+    attrib_len += get_ec_attr_size(sizeof(unsigned short));
 
-    wrapped_len = set_auth_frame_wrapped_data(&frame->body, tlv_len, true);
-    tlv_len += (wrapped_len + 4);
+    wrapped_len = set_auth_frame_wrapped_data(frame, attrib_len, true);
+    attrib_len += get_ec_attr_size(wrapped_len);
 
     printf("%s:%d Exit\n", __func__, __LINE__);
 
-    return tlv_len;
+    return attrib_len;
 
 }
 
@@ -136,82 +134,59 @@ int ec_session_t::create_auth_cnf(unsigned char *buff)
 
 int ec_session_t::create_pres_ann(unsigned char *buff)
 {
-    ec_frame_t    *frame;
-    ec_tlv_t *tlv;
-    unsigned short tlv_len;
 
-    unsigned char keyasn1[1024];
-    EC_KEY *responder_boot_key;
+    ec_frame_t *frame = (ec_frame_t *)buff;
+    frame->frame_type = ec_frame_type_presence_announcement; 
 
-    frame = (ec_frame_t *)buff;
-    tlv_len = 0;
+    EC_KEY * responder_boot_key = get_responder_boot_key();
 
-    prepare_frame(frame, ec_frame_type_presence_announcement);
-
-    responder_boot_key = get_responder_boot_key(keyasn1, sizeof(keyasn1));
-
-    if (compute_key_hash(responder_boot_key, m_params.responder_keyhash) < 1) {
+    // Compute the hash of the responder boot key 
+    unsigned char resp_boot_key_chirp_hash[SHA512_DIGEST_LENGTH];
+    if (compute_key_hash(responder_boot_key, resp_boot_key_chirp_hash, "chirp") < 1) {
         m_activation_status = ActStatus_Failed;
-        printf("%s:%d unable to get x, y of the curve\n", __func__, __LINE__);
+        printf("%s:%d unable to compute \"chirp\" responder bootstrapping key hash\n", __func__, __LINE__);
         return -1;
     }
 
-    tlv = (ec_tlv_t *)frame->body.attrib;
+    uint8_t* attribs = frame->attributes;
+    unsigned short attrib_len = 0;
 
-    tlv = set_tlv((unsigned char *)tlv, ec_attrib_id_responder_boot_hash, 
-            SHA256_DIGEST_LENGTH, m_params.responder_keyhash);
-    tlv_len += (SHA256_DIGEST_LENGTH + 4);
+    attribs = add_attrib(attribs, ec_attrib_id_resp_bootstrap_key_hash, SHA256_DIGEST_LENGTH, resp_boot_key_chirp_hash);
+    attrib_len += get_ec_attr_size(SHA256_DIGEST_LENGTH); 
 
-    return tlv_len;
+    return attrib_len;
 }
 
 int ec_session_t::handle_pres_ann(unsigned char *buff, unsigned int len)
 {
-    ec_frame_t *frame;
-    ec_tlv_t *tlv = NULL;
-    int tlv_len;
-
-    frame = (ec_frame_t *)buff;
-    tlv_len = 0;
+    ec_frame_t *frame = (ec_frame_t *)buff;
 
     if (validate_frame(frame, ec_frame_type_presence_announcement) == false) {
         printf("%s:%d: frame validation failed\n", __func__, __LINE__);
         return -1;
     }
 
-    if ((tlv = get_tlv(frame->body.attrib, ec_attrib_id_responder_boot_hash, len)) == NULL) {
+    ec_attribute_t *attrib = get_attrib(frame->attributes, len-EC_FRAME_BASE_SIZE, ec_attrib_id_resp_bootstrap_key_hash);
+    if (!attrib) {
         return -1;
     }
 
-    memcpy(m_params.responder_keyhash, tlv->value, tlv->length);
+    // TODO: Come back to this
+    memcpy(m_params.responder_keyhash, attrib->data, attrib->length);
 
     return 0;	
 }
 
-void ec_session_t::prepare_frame(ec_frame_t *frame, ec_frame_type_t type)
-{
-    frame->hdr.cat = 0x04;
-    frame->hdr.action = 0x09;
-    frame->body.ec_oui.oui[0] = 0x50;
-    frame->body.ec_oui.oui[1] = 0x6f;
-    frame->body.ec_oui.oui[2] = 0x9a;
-
-    frame->body.ec_oui.oui_type = DPP_OUI_TYPE;
-
-    frame->body.crypto = 1; // Cryptographic suite 1 consists of the SHA2 family of hash algorithms and AES-SIV
-    frame->body.frame_type = type;
-}
-
 bool ec_session_t::validate_frame(ec_frame_t *frame, ec_frame_type_t type)
 {
-    if ((frame->hdr.cat != 0x04) 
-            || (frame->hdr.action != 0x09)
-            || (frame->body.ec_oui.oui[0] != 0x50)
-            || (frame->body.ec_oui.oui[1] != 0x6f)
-            || (frame->body.ec_oui.oui[2] != 0x9a)
-            || (frame->body.ec_oui.oui_type != DPP_OUI_TYPE)
-            || (frame->body.crypto != 1)
-            || (frame->body.frame_type != type)) {
+    if ((frame->category != 0x04) 
+            || (frame->action != 0x09)
+            || (frame->oui[0] != 0x50)
+            || (frame->oui[1] != 0x6f)
+            || (frame->oui[2] != 0x9a)
+            || (frame->oui_type != DPP_OUI_TYPE)
+            || (frame->crypto_suite != 0x01)
+            || (frame->frame_type != type)) {
         return false;
     }
 
@@ -400,86 +375,19 @@ int ec_session_t::init_session()
 
 }
 
-int ec_session_t::compute_intermediate_key(bool first)
-{       
-    unsigned int primelen, offset, keylen;
-    unsigned char m[2048];
 
-    BIGNUM *x = (first == true)?m_params.m:m_params.n;
-    const char *info = (first == true)?"first intermediate key":"second intermediate key";
-    unsigned char *key = (first == true)?m_params.k1:m_params.k2;
 
-    primelen = BN_num_bytes(m_params.prime);
-
-    memset(m, 0, primelen);
-    offset = primelen - BN_num_bytes(x);
-    BN_bn2bin(x, m + offset);
-    if ((keylen = hkdf(m_params.hashfcn, 0, m, primelen, NULL, 0, 
-                    (unsigned char *)info, strlen(info),
-                    key, m_params.digestlen)) == 0) {
-        printf("%s:%d: Failed in hashing\n", __func__, __LINE__);
-        return -1;
-    }
-
-    printf("Key:\n"); 
-    print_hex_dump(m_params.digestlen, key);
-
-    return 0;
-}       
-
-int ec_session_t::compute_key_hash(EC_KEY *key, unsigned char *digest)
-{
-    int asn1len;
-    BIO *bio;
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-    EVP_MD_CTX ctx;
-#else
-    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
-#endif
-    unsigned int mdlen = SHA256_DIGEST_LENGTH;
-    unsigned char *asn1;
-
-    memset(digest, 0, SHA256_DIGEST_LENGTH);
-
-    if ((bio = BIO_new(BIO_s_mem())) == NULL) {
-        return -1;
-    }
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-    EVP_MD_CTX_init(&ctx);
-#else
-    EVP_MD_CTX_reset(ctx);
-#endif
-    (void)i2d_EC_PUBKEY_bio(bio, key);
-    (void)BIO_flush(bio);
-    asn1len = BIO_get_mem_data(bio, &asn1);
-
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-    EVP_DigestInit(&ctx, EVP_sha256());
-    EVP_DigestUpdate(&ctx, asn1, asn1len);
-    EVP_DigestFinal(&ctx, digest, &mdlen);
-#else
-    EVP_DigestInit(ctx, EVP_sha256());
-    EVP_DigestUpdate(ctx, asn1, asn1len);
-    EVP_DigestFinal(ctx, digest, &mdlen);
-#endif
-
-    BIO_free(bio);
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-    EVP_MD_CTX_cleanup(&ctx);
-#else
-    EVP_MD_CTX_free(ctx);
-#endif
-    return mdlen;
-}
-
-int ec_session_t::set_auth_frame_wrapped_data(ec_frame_body_t *frame, unsigned int non_wrapped_len, bool auth_init)
+int ec_session_t::set_auth_frame_wrapped_data(ec_frame_t *frame, unsigned int non_wrapped_len, bool auth_init)
 {
     siv_ctx ctx;
-    unsigned char plain[512];
-    ec_tlv_t *tlv;
-    unsigned char caps = 2;
+    
+    ec_attribute_t *attrib;
+    ec_dpp_capabilities_t caps = {{
+        .enrollee = 0,
+        .configurator = 1
+    }};
     unsigned int wrapped_len = 0;
-    ec_tlv_t *wrapped_tlv;
+    ec_attribute_t *wrapped_attrib;
     unsigned char *key;
 
     key = (auth_init == true) ? m_params.k1:m_params.ke;
@@ -499,34 +407,80 @@ int ec_session_t::set_auth_frame_wrapped_data(ec_frame_body_t *frame, unsigned i
             return -1;
     }
 
-
-    tlv = (ec_tlv_t *)plain;
+    unsigned char plain[512];
+    uint8_t* attribs = plain;
 
     if (auth_init == true) {
-        tlv = set_tlv((unsigned char*)tlv, ec_attrib_id_initiator_nonce, m_params.noncelen, m_params.initiator_nonce);
-        wrapped_len += (4 + m_params.noncelen);
+        attribs = add_attrib(attribs, ec_attrib_id_init_nonce, m_params.noncelen, m_params.initiator_nonce);
+        wrapped_len += get_ec_attr_size(m_params.noncelen); 
 
-        tlv = set_tlv((unsigned char*)tlv, ec_attrib_id_initiator_cap, 1, &caps);
-        wrapped_len += 5;
+        attribs = add_attrib(attribs, ec_attrib_id_init_caps, caps.byte);
+        wrapped_len += get_ec_attr_size(1);
     } else {
-        tlv = set_tlv((unsigned char*)tlv, ec_attrib_id_initiator_auth_tag, m_params.digestlen, m_params.iauth);
-        wrapped_len += (4 + m_params.digestlen);
+        attribs = add_attrib(attribs, ec_attrib_id_init_auth_tag, m_params.digestlen, m_params.iauth);
+        wrapped_len += get_ec_attr_size(m_params.digestlen);
 
     }
 
-    wrapped_tlv = (ec_tlv_t *)(frame->attrib + non_wrapped_len);
-    wrapped_tlv->type = ec_attrib_id_wrapped_data;
-    wrapped_tlv->length = wrapped_len + AES_BLOCK_SIZE;
+    wrapped_attrib = (ec_attribute_t *)(frame->attributes + non_wrapped_len);
+    wrapped_attrib->attr_id = ec_attrib_id_wrapped_data;
+    wrapped_attrib->length = wrapped_len + AES_BLOCK_SIZE;
 
-    siv_encrypt(&ctx, plain, &wrapped_tlv->value[AES_BLOCK_SIZE], wrapped_len, wrapped_tlv->value, 2,
-            frame, sizeof(ec_frame_body_t),
-            frame->attrib, non_wrapped_len);
+    siv_encrypt(&ctx, plain, &wrapped_attrib->data[AES_BLOCK_SIZE], wrapped_len, wrapped_attrib->data, 2,
+            frame, sizeof(ec_frame_t), // Used for SIV (authentication)
+            frame->attributes, non_wrapped_len); // Used for SIV (authentication)
 
     //printf("%s:%d: Plain text:\n", __func__, __LINE__);
     //print_hex_dump(noncelen, plain);
 
     return wrapped_len + AES_BLOCK_SIZE;
 }
+
+ec_session_t::ec_session_t(ec_data_t *data)
+{
+    memcpy(&m_data, data, sizeof(ec_data_t));
+}
+
+ec_session_t::~ec_session_t()
+{
+
+}
+
+ec_attribute_t *ec_session_t::get_attrib(unsigned char *buff, unsigned short len, ec_attrib_id_t id)
+{
+    unsigned int total_len = 0;
+    ec_attribute_t *attrib = (ec_attribute_t *)buff;
+
+    while (total_len < len) {
+        if (attrib->attr_id == id) {
+            return attrib;
+        }
+
+        total_len += (get_ec_attr_size(attrib->length));
+        attrib = (ec_attribute_t *)((uint8_t*)attrib + get_ec_attr_size(attrib->length));
+    }
+
+    return NULL;
+}
+
+
+uint8_t* ec_session_t::add_attrib(unsigned char *buff, ec_attrib_id_t id, unsigned short len, unsigned char *data)
+{
+    if (buff == NULL || data == NULL || len == 0) {
+        fprintf(stderr, "Invalid input\n");
+        return NULL;
+    }
+    memset(buff, 0, get_ec_attr_size(len));
+    ec_attribute_t *attr = (ec_attribute_t *)buff;
+    // EC attribute id and length are in host byte order according to the spec (8.1)
+    attr->attr_id = id;
+    attr->length = len;
+    memcpy(attr->data, data, len);
+
+    // Return the next attribute in the buffer
+    return buff + get_ec_attr_size(len);
+}
+
 
 unsigned short ec_session_t::channel_to_frequency(unsigned int channel)
 {
@@ -685,246 +639,4 @@ void ec_session_t::print_hex_dump(unsigned int length, unsigned char *buffer)
     }
 
     printf ("  %s\n", buff);
-}
-
-void ec_session_t::print_bignum (BIGNUM *bn)
-{
-    unsigned char *buf;
-    int len;
-
-    len = BN_num_bytes(bn);
-    if ((buf = (unsigned char *)malloc(len)) == NULL) {
-        printf("Could not print bignum\n");
-        return;
-    }
-    BN_bn2bin(bn, buf);
-    print_hex_dump(len, buf);
-    free(buf);
-}
-
-void ec_session_t::print_ec_point (const EC_GROUP *group, BN_CTX *bnctx, EC_POINT *point)
-{
-    BIGNUM *x = NULL, *y = NULL;
-
-    if ((x = BN_new()) == NULL) {
-        printf("%s:%d:Could not print ec_point\n", __func__, __LINE__);
-        return;
-    }
-
-    if ((y = BN_new()) == NULL) {
-        BN_free(x);
-        printf("%s:%d:Could not print ec_point\n", __func__, __LINE__);
-        return;
-    }
-
-    if (EC_POINT_get_affine_coordinates_GFp(group, point, x, y, bnctx) == 0) {
-        BN_free(y);
-        BN_free(x);
-        printf("%s:%d:Could not print ec_point\n", __func__, __LINE__);
-        return;
-
-    }
-
-    printf("POINT.x:\n");
-    print_bignum(x);
-    printf("POINT.y:\n");
-    print_bignum(y);
-
-    BN_free(y);
-    BN_free(x);
-}
-
-ec_tlv_t *ec_session_t::get_tlv(unsigned char *buff, ec_attrib_id_t id, unsigned short len)
-{
-    unsigned int total_len = 0;
-    bool found = false;
-    ec_tlv_t *tlv = (ec_tlv_t *)buff;
-
-    while (total_len < len) {
-        if (tlv->type == id) {
-            found = true;
-            break;
-        }
-
-        total_len += (2*sizeof(unsigned short) + tlv->length);
-        tlv = (ec_tlv_t *)((unsigned char *)tlv + 2*sizeof(unsigned short) + tlv->length);
-    }
-
-    return (found == true) ? tlv:NULL;
-}
-
-
-ec_tlv_t *ec_session_t::set_tlv(unsigned char *buff, ec_attrib_id_t id, unsigned short len, unsigned char *val)
-{
-    ec_tlv_t *tlv = (ec_tlv_t *)buff;
-
-    tlv->type = id;
-    tlv->length = len;
-    memcpy(tlv->value, val, len);
-
-    return (ec_tlv_t *)(buff + 2*sizeof(unsigned short) + len);
-}
-
-ec_session_t::ec_session_t(ec_data_t *data)
-{
-    memcpy(&m_data, data, sizeof(ec_data_t));
-}
-
-ec_session_t::~ec_session_t()
-{
-
-}
-
-EC_KEY *ec_session_t::get_responder_boot_key(unsigned char *key, unsigned int len)
-{
-    EC_KEY *responder_boot_key;
-    unsigned int asn1len;
-
-    memset(key, 0, len);
-    if ((asn1len = EVP_DecodeBlock(key, (unsigned char *)m_data.rPubKey, strlen(m_data.rPubKey))) < 0) {
-        m_activation_status = ActStatus_Failed;
-        printf("%s:%d Failed to decode base 64 initiator public key\n", __func__, __LINE__);
-        return NULL;
-    }
-
-    responder_boot_key = d2i_EC_PUBKEY(NULL, (const unsigned char **)&key, asn1len);
-
-    EC_KEY_set_conv_form(responder_boot_key, POINT_CONVERSION_COMPRESSED);
-    EC_KEY_set_asn1_flag(responder_boot_key, OPENSSL_EC_NAMED_CURVE);
-
-    return responder_boot_key;
-}
-
-EC_KEY *ec_session_t::get_initiator_boot_key(unsigned char *key, unsigned int len)
-{
-    EC_KEY *initiator_boot_key;
-    unsigned int asn1len;
-
-    memset(key, 0, len);
-    if ((asn1len = EVP_DecodeBlock(key, (unsigned char *)m_data.iPubKey, strlen(m_data.iPubKey))) < 0) {
-        m_activation_status = ActStatus_Failed;
-        printf("%s:%d Failed to decode base 64 initiator public key\n", __func__, __LINE__);
-        return NULL;
-    }
-
-    initiator_boot_key = d2i_EC_PUBKEY(NULL, (const unsigned char **)&key, asn1len);
-
-    EC_KEY_set_conv_form(initiator_boot_key, POINT_CONVERSION_COMPRESSED);
-    EC_KEY_set_asn1_flag(initiator_boot_key, OPENSSL_EC_NAMED_CURVE);
-
-    return initiator_boot_key;
-}
-
-int ec_session_t::hkdf (const EVP_MD *h, int skip, unsigned char *ikm, int ikmlen,
-        unsigned char *salt, int saltlen, unsigned char *info, int infolen,
-        unsigned char *okm, int okmlen)
-{
-    unsigned char *prk, *tweak, ctr, *digest;
-    int len;
-    unsigned int digestlen, prklen, tweaklen;
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-    HMAC_CTX ctx;
-#else
-    HMAC_CTX *ctx = HMAC_CTX_new();
-#endif
-
-    digestlen = prklen = EVP_MD_size(h);
-    if ((digest = (unsigned char *)malloc(digestlen)) == NULL) {
-        perror("malloc");
-        return 0;
-    }
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-    HMAC_CTX_init(&ctx);
-#else
-    HMAC_CTX_reset(ctx);
-#endif
-
-    if (!skip) {
-        /*
-         * if !skip then do HKDF-extract
-         */
-        if ((prk = (unsigned char *)malloc(digestlen)) == NULL) {
-            free(digest);
-            perror("malloc");
-            return 0;
-        }
-        /*
-         * if there's no salt then use all zeros
-         */
-        if (!salt || (saltlen == 0)) {
-            if ((tweak = (unsigned char *)malloc(digestlen)) == NULL) {
-                free(digest);
-                free(prk);
-                perror("malloc");
-                return 0;
-            }
-            memset(tweak, 0, digestlen);
-            tweaklen = saltlen;
-        } else {
-            tweak = salt;
-            tweaklen = saltlen;
-        }
-        (void)HMAC(h, tweak, tweaklen, ikm, ikmlen, prk, &prklen);
-        if (!salt || (saltlen == 0)) {
-            free(tweak);
-        }
-    } else {
-        prk = ikm;
-        prklen = ikmlen;
-    }
-    memset(digest, 0, digestlen);
-    digestlen = 0;
-    ctr = 0;
-    len = 0;
-    while (len < okmlen) {
-        /*
-         * T(0) = all zeros
-         * T(n) = HMAC(prk, T(n-1) | info | counter)
-         * okm = T(0) | ... | T(n)
-         */
-        ctr++;
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-        HMAC_Init_ex(&ctx, prk, prklen, h, NULL);
-        HMAC_Update(&ctx, digest, digestlen);
-#else
-        HMAC_Init_ex(ctx, prk, prklen, h, NULL);
-        HMAC_Update(ctx, digest, digestlen);
-#endif
-        if (info && (infolen != 0)) {
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-            HMAC_Update(&ctx, info, infolen);
-#else
-            HMAC_Update(ctx, info, infolen);
-#endif
-        }
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-        HMAC_Update(&ctx, &ctr, sizeof(unsigned char));
-        HMAC_Final(&ctx, digest, &digestlen);
-#else
-        HMAC_Update(ctx, &ctr, sizeof(unsigned char));
-        HMAC_Final(ctx, digest, &digestlen);
-#endif
-        if ((len + digestlen) > okmlen) {
-            memcpy(okm + len, digest, okmlen - len);
-        } else {
-            memcpy(okm + len, digest, digestlen);
-        }
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-        HMAC_CTX_cleanup(&ctx);
-#else
-        HMAC_CTX_free(ctx);
-#endif
-        len += digestlen;
-    }
-    if (!skip) {
-        free(prk);
-    }
-    free(digest);
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-    HMAC_CTX_cleanup(&ctx);
-#else
-    HMAC_CTX_free(ctx);
-#endif
-
-    return okmlen;
 }
