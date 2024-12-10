@@ -46,7 +46,7 @@ class ec_session_t {
 
 
     int compute_intermediate_key(bool is_first);
-    int set_auth_frame_wrapped_data(ec_frame_t *frame, unsigned int non_wrapped_len, bool auth_init);
+    int set_auth_frame_wrapped_data(ec_frame_t *frame, unsigned int non_wrapped_len, bool do_init_auth);
 
     /**
      * @brief Get the responder boot key object
