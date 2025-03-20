@@ -706,7 +706,7 @@ std::string em_crypto_t::base64url_encode(const uint8_t *input, size_t length) {
 }
 
 
-std::pair<uint8_t*,size_t> em_crypto_t::base64url_decode(const std::string& input) {
+std::optional<std::vector<uint8_t>> em_crypto_t::base64url_decode(const std::string& input) {
     // Convert Base64URL to standard Base64
     std::string base64_input = input;
     
@@ -726,7 +726,7 @@ std::pair<uint8_t*,size_t> em_crypto_t::base64url_decode(const std::string& inpu
     return base64_decode(base64_input);
 }
 
-std::optional<std::vector<uint8_t>> em_crypto_t::sign_data(const std::vector<uint8_t> data_to_sign, EVP_PKEY * private_key, const EVP_MD * md)
+std::optional<std::vector<uint8_t>> em_crypto_t::sign_data_ecdsa(const std::vector<uint8_t> data_to_sign, EVP_PKEY * private_key, const EVP_MD * md)
 {
     // Create signature context
     #if OPENSSL_VERSION_NUMBER < 0x10100000L
@@ -743,7 +743,8 @@ std::optional<std::vector<uint8_t>> em_crypto_t::sign_data(const std::vector<uin
     
     // Initialize the signature operation with provided digest
     if (EVP_DigestSignInit(md_ctx, nullptr, md, nullptr, private_key) != 1) {
-        std::cerr << "Failed to initialize signature operation" << std::endl;
+        auto err = ERR_get_error();
+        std::cerr << "Failed to initialize signature operation: " << ERR_error_string(err, nullptr) << std::endl;
         #if OPENSSL_VERSION_NUMBER < 0x10100000L
         EVP_MD_CTX_cleanup(md_ctx);
         #else
@@ -754,7 +755,8 @@ std::optional<std::vector<uint8_t>> em_crypto_t::sign_data(const std::vector<uin
     
     // Provide the data to be signed
     if (EVP_DigestSignUpdate(md_ctx, data_to_sign.data(), data_to_sign.size()) != 1) {
-        std::cerr << "Failed to update signature data" << std::endl;
+        auto err = ERR_get_error();
+        std::cerr << "Failed to provide data to be signed: " << ERR_error_string(err, nullptr) << std::endl;
         #if OPENSSL_VERSION_NUMBER < 0x10100000L
         EVP_MD_CTX_cleanup(md_ctx);
         #else
@@ -766,7 +768,8 @@ std::optional<std::vector<uint8_t>> em_crypto_t::sign_data(const std::vector<uin
     // Determine the signature length
     size_t sig_len = 0;
     if (EVP_DigestSignFinal(md_ctx, nullptr, &sig_len) != 1) {
-        std::cerr << "Failed to determine signature length" << std::endl;
+        auto err = ERR_get_error();
+        std::cerr << "Failed to determine signature length: " << ERR_error_string(err, nullptr) << std::endl;
         #if OPENSSL_VERSION_NUMBER < 0x10100000L
         EVP_MD_CTX_cleanup(md_ctx);
         #else
@@ -778,7 +781,8 @@ std::optional<std::vector<uint8_t>> em_crypto_t::sign_data(const std::vector<uin
     // Get the signature
     std::vector<uint8_t> signature(sig_len);
     if (EVP_DigestSignFinal(md_ctx, signature.data(), &sig_len) != 1) {
-        std::cerr << "Failed to create signature" << std::endl;
+        auto err = ERR_get_error();
+        std::cerr << "Failed to create signature: " << ERR_error_string(err, nullptr) << std::endl;
         #if OPENSSL_VERSION_NUMBER < 0x10100000L
         EVP_MD_CTX_cleanup(md_ctx);
         #else
@@ -800,28 +804,47 @@ std::optional<std::vector<uint8_t>> em_crypto_t::sign_data(const std::vector<uin
     return signature;
 }
 
-std::pair<uint8_t*,size_t> em_crypto_t::base64_decode(const std::string& input) {
+std::optional<std::vector<uint8_t>> em_crypto_t::base64_decode(const std::string& input) {
     BIO *bio, *b64;
-    uint8_t* result = static_cast<uint8_t*> (malloc(input.size()));
 
-    bio = BIO_new_mem_buf(input.c_str(), -1);
-    b64 = BIO_new(BIO_f_base64());
-    bio = BIO_push(b64, bio);
-
-    BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
-    int output_length = BIO_read(bio, result, static_cast<int> (input.size()));
+    // Create a vector to hold the decoded data
+    std::vector<uint8_t> output;
     
-    if (output_length <= 0){
-        free(result);
-        result = NULL;
-        // Used as standard NULL length output
-        output_length = 0;
+    if (input.empty()) {
+        return output;
     }
-
-    // Free the BIO chain
+    
+    // Calculate maximum possible decoded length (3/4 of input size)
+    size_t max_decoded_len = (input.length() * 3) / 4 + 1;
+    
+    output.resize(max_decoded_len);
+    
+    bio = BIO_new_mem_buf(input.c_str(), -1);
+    if (!bio) {
+        return std::nullopt;
+    }
+    
+    b64 = BIO_new(BIO_f_base64());
+    if (!b64) {
+        BIO_free(bio);
+        return std::nullopt;
+    }
+    
+    bio = BIO_push(b64, bio);
+    BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
+    
+    int output_length = BIO_read(bio, output.data(), static_cast<int>(max_decoded_len));
+    
     BIO_free_all(bio);
-
-    return {result, static_cast<size_t> (output_length)};
+    
+    if (output_length <= 0) {
+        return std::nullopt;
+    }
+    
+    // Resize the vector to the actual decoded size
+    output.resize(static_cast<size_t>(output_length));
+    
+    return output;
 }
 
 void em_crypto_t::cleanup_bignums(BIGNUM *p, BIGNUM *g, BIGNUM *priv, BIGNUM *pub) {
@@ -1172,3 +1195,161 @@ void em_crypto_t::free_key(SSL_KEY *key)
     EC_KEY_free(key);
 }
 #endif
+
+
+
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+SSL_KEY* em_crypto_t::create_ec_key_from_coordinates(const std::vector<uint8_t> x_bin,
+                                                       const std::vector<uint8_t> y_bin,
+                                                       const std::optional<std::vector<uint8_t>> priv_key_bytes,
+                                                       const std::string& group_name) {
+    SSL_KEY* pkey = nullptr;
+    OSSL_PARAM_BLD* param_bld = nullptr;
+    OSSL_PARAM* params = nullptr;
+    EVP_PKEY_CTX* ctx = nullptr;
+    BIGNUM *x, *y, *priv_key_bn = nullptr;
+
+    if (x_bin.empty() || y_bin.empty()) {
+        return nullptr;
+    }
+
+    param_bld = OSSL_PARAM_BLD_new();
+    if (!param_bld) goto err;
+
+    if (!OSSL_PARAM_BLD_push_utf8_string(param_bld, OSSL_PKEY_PARAM_GROUP_NAME, group_name.c_str(), 0)) goto err;
+
+    if (priv_key_bytes.has_value()) {
+        priv_key_bn = BN_bin2bn(priv_key_bytes->data(), static_cast<int>(priv_key_bytes->size()), nullptr);
+        if (!priv_key_bn) goto err;
+        if (!OSSL_PARAM_BLD_push_BN(param_bld, OSSL_PKEY_PARAM_PRIV_KEY, priv_key_bn)) goto err;
+    }
+
+    //Convert X and Y buffers to BIGNUMs
+    x = BN_bin2bn(x_bin.data(), static_cast<int>(x_bin.size()), nullptr);
+    y = BN_bin2bn(y_bin.data(), static_cast<int>(y_bin.size()), nullptr);
+    if (!x || !y) goto err;
+
+    if (!OSSL_PARAM_BLD_push_BN(param_bld, OSSL_PKEY_PARAM_EC_PUB_X, x)) goto err;
+
+    if (!OSSL_PARAM_BLD_push_BN(param_bld, OSSL_PKEY_PARAM_EC_PUB_Y, y)) goto err;
+
+    params = OSSL_PARAM_BLD_to_param(param_bld);
+    if (!params) goto err;
+
+    ctx = EVP_PKEY_CTX_new_from_name(NULL, "EC", NULL);
+    if (!ctx) goto err;
+
+    if (EVP_PKEY_fromdata_init(ctx) <= 0) goto err;
+
+    if (priv_key_bytes.has_value()) {
+        if (EVP_PKEY_fromdata(ctx, &pkey, EVP_PKEY_KEYPAIR, params) <= 0) goto err;
+    } else {
+        if (EVP_PKEY_fromdata(ctx, &pkey, EVP_PKEY_PUBLIC_KEY, params) <= 0) goto err;
+    }
+
+    goto cleanup;
+
+err:
+    pkey = nullptr;
+    
+cleanup:
+    if (ctx) EVP_PKEY_CTX_free(ctx);
+    if (param_bld) OSSL_PARAM_BLD_free(param_bld);
+    if (params) OSSL_PARAM_free(params);
+    if (priv_key_bn) BN_free(priv_key_bn);
+    if (x) BN_free(x);
+    if (y) BN_free(y);
+    return pkey;
+}
+#else
+
+SSL_KEY* em_crypto_t::create_ec_key_from_coordinates(const std::vector<uint8_t> x_bin,
+                                                       const std::vector<uint8_t> y_bin,
+                                                       const std::optional<std::vector<uint8_t>> priv_key_bytes,
+                                                       const std::string& group_name) {
+    SSL_KEY* ec_key = nullptr;
+    BIGNUM *priv_key_bn = nullptr, *x = nullptr, *y = nullptr;
+
+    if (x_bin.empty() || y_bin.empty())
+        return nullptr;
+
+    int nid = ossl_ec_curve_nist2nid_int(group_name);
+    if (nid == NID_undef)
+        return nullptr;
+
+    ec_key = EC_KEY_new_by_curve_name(nid);
+    if (!ec_key)
+        return nullptr;
+
+    if (priv_key_bytes.has_value()) {
+        priv_key_bn = BN_bin2bn(priv_key_bytes->data(), priv_key_bytes->size(), nullptr);
+        if (!priv_key_bn)
+            goto err;
+        if (EC_KEY_set_private_key(ec_key, priv_key_bn) != 1)
+            goto err;
+    }
+
+    x = BN_bin2bn(x_bin.data(), x_bin.size(), nullptr);
+    y = BN_bin2bn(y_bin.data(), y_bin.size(), nullptr);
+    if (!x || !y)
+        goto err;
+    if (!EC_KEY_set_public_key_affine_coordinates(ec_key, x, y))
+        goto err;
+
+    BN_free(x);
+    BN_free(y);
+    BN_free(priv_key_bn);
+    return ec_key;
+
+err:
+    if (x) BN_free(x);
+    if (y) BN_free(y);
+    if (priv_key_bn) BN_free(priv_key_bn);
+    if (ec_key) EC_KEY_free(ec_key);
+    return nullptr;
+}
+#endif
+
+
+bool em_crypto_t::verify_signature_with_context(const std::vector<uint8_t>& message, const std::vector<uint8_t>& signature, EVP_PKEY* pkey, const EVP_MD* hash_function) {
+    // Create verification context
+    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    if (!ctx) {
+        std::cerr << "Failed to create verification context" << std::endl;
+        return false;
+    }
+
+    bool result = false;
+
+    // Initialize the verification context with provided key and hash function
+    if (EVP_DigestVerifyInit(ctx, nullptr, hash_function, nullptr, pkey) != 1) {
+        std::cerr << "Failed to initialize verification context" << std::endl;
+        EVP_MD_CTX_free(ctx);
+        return false;
+    }
+
+    // Update the context with the message
+    if (EVP_DigestVerifyUpdate(ctx, message.data(), message.size()) != 1) {
+        std::cerr << "Failed to update verification context" << std::endl;
+        EVP_MD_CTX_free(ctx);
+        return false;
+    }
+
+    // Verify the signature
+    int verify_result = EVP_DigestVerifyFinal(ctx, signature.data(), signature.size());
+    if (verify_result == 1) {
+        // Signature is valid
+        result = true;
+    } else if (verify_result == 0) {
+        // Signature is invalid
+        std::cerr << "Signature verification failed" << std::endl;
+    } else {
+        // Error occurred during verification
+        std::cerr << "Error during signature verification: " << ERR_error_string(ERR_get_error(), nullptr) << std::endl;
+    }
+
+    // Clean up
+    EVP_MD_CTX_free(ctx);
+
+    return result;
+}

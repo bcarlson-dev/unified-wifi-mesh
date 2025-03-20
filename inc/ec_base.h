@@ -244,14 +244,14 @@ typedef struct {
 } __attribute__((packed)) ec_gas_initial_response_frame_t;
 
 // Used to avoid many many if-not-null checks
-#define ASSERT_FALSE(x, ret, errMsg, ...) \
+#define ASSERT_MSG_FALSE(x, ret, errMsg, ...) \
     if(x) { \
         fprintf(stderr, errMsg, ## __VA_ARGS__); \
         return ret; \
     }
 
-#define ASSERT_TRUE(x, ret, errMsg, ...) ASSERT_FALSE(!(x), ret, errMsg, ## __VA_ARGS__)
-#define ASSERT_NOT_NULL(x, ret, errMsg, ...) ASSERT_FALSE(x == NULL, ret, errMsg, ## __VA_ARGS__)
+#define ASSERT_MSG_TRUE(x, ret, errMsg, ...) ASSERT_MSG_FALSE(!(x), ret, errMsg, ## __VA_ARGS__)
+#define ASSERT_NOT_NULL(x, ret, errMsg, ...) ASSERT_MSG_FALSE(x == NULL, ret, errMsg, ## __VA_ARGS__)
 
 /**
  * @brief Asserts that a pointer is not NULL, and if it is, frees up to 3 pointers and returns a value
@@ -296,9 +296,9 @@ typedef struct {
     ASSERT_NOT_NULL_FREE2(x, ret, ptr1, NULL, errMsg, ## __VA_ARGS__)
 
 
-#define ASSERT_NULL(x, ret, errMsg, ...) ASSERT_TRUE(x == 0, ret, errMsg, ## __VA_ARGS__)
-#define ASSERT_EQUALS(x, y, ret, errMsg, ...) ASSERT_TRUE(x == y, ret, errMsg, ## __VA_ARGS__)
-#define ASSERT_NOT_EQUALS(x, y, ret, errMsg, ...) ASSERT_FALSE(x == y, ret, errMsg, ## __VA_ARGS__)
+#define ASSERT_NULL(x, ret, errMsg, ...) ASSERT_MSG_TRUE(x == 0, ret, errMsg, ## __VA_ARGS__)
+#define ASSERT_EQUALS(x, y, ret, errMsg, ...) ASSERT_MSG_TRUE(x == y, ret, errMsg, ## __VA_ARGS__)
+#define ASSERT_NOT_EQUALS(x, y, ret, errMsg, ...) ASSERT_MSG_FALSE(x == y, ret, errMsg, ## __VA_ARGS__)
 
 #ifndef SSL_KEY
 #if OPENSSL_VERSION_NUMBER < 0x30000000L

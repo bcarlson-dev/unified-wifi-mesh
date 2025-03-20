@@ -651,14 +651,13 @@ std::optional<std::vector<cJSON*>> ec_crypto::split_decode_connector(const char*
     std::vector<cJSON*> decoded_parts;
     for (size_t i = 0; i < decoded_parts.size(); i++) {
         auto part = parts[i];
-        auto [decoded, len] = em_crypto_t::base64url_decode(part);
-        if (decoded == NULL || len == 0) {
+        auto decoded = em_crypto_t::base64url_decode(part);
+        if (decoded == std::nullopt) {
             printf("%s:%d: Failed to decode part %ld, exiting\n", __func__, __LINE__, i);
             did_succeed = false;
             break;
         }
-        std::string decoded_str(reinterpret_cast<char*>(decoded), len);
-        free(decoded);
+        std::string decoded_str(decoded->begin(), decoded->end());
         
         // Test if JSON decodes properly
         cJSON *json = cJSON_Parse(decoded_str.c_str());
@@ -710,7 +709,7 @@ const char * ec_crypto::generate_connector(const cJSON * jws_header, const cJSON
 
     std::string sig_data = base64_jws_header + "." + base64_jws_payload;
     std::vector<uint8_t> sig_data_vec(sig_data.begin(), sig_data.end());
-    std::optional<std::vector<uint8_t>> signature = em_crypto_t::sign_data(sig_data_vec, sign_key);
+    std::optional<std::vector<uint8_t>> signature = em_crypto_t::sign_data_ecdsa(sig_data_vec, sign_key);
     if (!signature.has_value()) {
         printf("%s:%d: Failed to sign data\n", __func__, __LINE__);
         return NULL;

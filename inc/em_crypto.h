@@ -334,7 +334,7 @@ public:
      * 
      * @note The caller is responsible for freeing the returned memory
      */
-    static std::pair<uint8_t*,size_t> base64_decode(const std::string& input);
+    static std::optional<std::vector<uint8_t>> base64_decode(const std::string& input);
 
     /**
      * Decodes Base64URL encoded data (URL-safe variant).
@@ -347,19 +347,20 @@ public:
      * 
      * @note The caller is responsible for freeing the returned memory
      */
-    static std::pair<uint8_t*,size_t> base64url_decode(const std::string& input);
+    static std::optional<std::vector<uint8_t>> base64url_decode(const std::string& input);
 
     /**
-    * Signs data using the provided private key and hashing algorithm.
-    * NOTE: MAY SWITCH TO std::pair<uint8_t*,size_t> 
+    * Signs data using the provided private key and hashing algorithm with ECDSA
     * 
     * @param data_to_sign The data string to be signed
     * @param private_key OpenSSL EVP_PKEY pointer containing the private key
     * @param md Digest method to use (defaults to SHA-256)
     * @return Signature as vector of bytes or nullopt on failure
     */
-    static std::optional<std::vector<uint8_t>> sign_data(const std::vector<uint8_t> data_to_sign, EVP_PKEY* private_key, const EVP_MD* md = EVP_sha256());
+    static std::optional<std::vector<uint8_t>> sign_data_ecdsa(const std::vector<uint8_t> data_to_sign, EVP_PKEY* private_key, const EVP_MD* md = EVP_sha256());
 
+
+    static bool verify_signature_with_context(const std::vector<uint8_t>& message, const std::vector<uint8_t>& signature, EVP_PKEY* pkey, const EVP_MD* hash_function);
     /**
      * Creates an OpenSSL EC_KEY from a base64-encoded DER public key
      *
@@ -370,6 +371,9 @@ public:
      * @note This function assumes the input is a valid base64-encoded DER format EC public key
      */
     static SSL_KEY* create_ec_key_from_base64_der(const char* base64_der_pubkey);
+
+    static SSL_KEY* create_ec_key_from_coordinates(const std::vector<uint8_t> x_bin, const std::vector<uint8_t> y_bin, const std::optional<std::vector<uint8_t>> priv_key_bytes = std::nullopt,
+                                                   const std::string& group_name = "P-256");
 
 
     static EC_GROUP* get_key_group(const SSL_KEY* key);
