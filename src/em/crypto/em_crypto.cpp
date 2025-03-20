@@ -620,6 +620,209 @@ uint8_t em_crypto_t::platform_compute_shared_secret(uint8_t **shared_secret, uin
     return 0;
 }
 
+/**
+ * Encodes binary data using standard Base64 encoding.
+ * 
+ * @param input Binary data to encode
+ * @param length Length of the input data
+ * @return Base64 encoded string or empty string on failure
+ */
+std::string em_crypto_t::base64_encode(const uint8_t *input, size_t length) {
+    if (!input || length == 0) {
+        return "";
+    }
+
+    BIO *bio, *b64;
+    
+    // Create a base64 filter BIO and a memory BIO
+    b64 = BIO_new(BIO_f_base64());
+    bio = BIO_new(BIO_s_mem());
+    bio = BIO_push(b64, bio);  // Chain them together
+
+    // Disable newlines in the output
+    BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
+    
+    // Write data through the BIO chain
+    BIO_write(bio, input, static_cast<int>(length));
+    BIO_flush(bio);
+
+    // Extract the encoded data
+    size_t data_length = 0;
+    char* data_ptr = nullptr;
+
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+    BUF_MEM *bufferPtr;
+    BIO_get_mem_ptr(bio, &bufferPtr);
+    data_length = bufferPtr->length;
+    data_ptr = bufferPtr->data; 
+#elif OPENSSL_VERSION_NUMBER < 0x30000000L
+    const BUF_MEM *bptr;
+    BIO_get_mem_ptr(bio, &bptr);
+    data_length = bptr->length;
+    data_ptr = bptr->data;
+#else
+    data_length = static_cast<size_t>(BIO_get_mem_data(bio, &data_ptr));
+#endif
+    
+    // Create string from the encoded data
+    std::string result(data_ptr, data_length);
+    
+    // Clean up
+    BIO_free_all(bio);
+    
+    return result;
+}
+
+/**
+ * Encodes binary data using Base64URL encoding (URL-safe variant).
+ * 
+ * Replaces '+' with '-', '/' with '_', and removes padding '=' characters.
+ * 
+ * @param input Binary data to encode
+ * @param length Length of the input data
+ * @return Base64URL encoded string or empty string on failure
+ */
+std::string em_crypto_t::base64url_encode(const uint8_t *input, size_t length) {
+    // First encode using standard Base64
+    std::string base64 = base64_encode(input, length);
+    
+    if (base64.empty()) {
+        return "";
+    }
+    
+    // Convert to Base64URL format
+    for (char& c : base64) {
+        if (c == '+') c = '-';
+        else if (c == '/') c = '_';
+    }
+    
+    // Remove padding characters
+    size_t pos = base64.find_last_not_of('=');
+    if (pos != std::string::npos) {
+        base64.erase(pos + 1);
+    }
+    
+    return base64;
+}
+
+
+std::pair<uint8_t*,size_t> em_crypto_t::base64url_decode(const std::string& input) {
+    // Convert Base64URL to standard Base64
+    std::string base64_input = input;
+    
+    // Replace URL-safe characters with standard Base64 characters
+    for (char& c : base64_input) {
+        if (c == '-') c = '+';
+        else if (c == '_') c = '/';
+    }
+    
+    // Add padding if necessary
+    size_t mod4 = base64_input.length() % 4;
+    if (mod4) {
+        base64_input.append(4 - mod4, '=');
+    }
+    
+    // Now delegate to the existing base64_decode function
+    return base64_decode(base64_input);
+}
+
+std::optional<std::vector<uint8_t>> em_crypto_t::sign_data(const std::vector<uint8_t> data_to_sign, EVP_PKEY * private_key, const EVP_MD * md)
+{
+    // Create signature context
+    #if OPENSSL_VERSION_NUMBER < 0x10100000L
+    EVP_MD_CTX md_ctx_obj;
+    EVP_MD_CTX_init(&md_ctx_obj);
+    EVP_MD_CTX* md_ctx = &md_ctx_obj;
+    #else
+    EVP_MD_CTX* md_ctx = EVP_MD_CTX_new();
+    if (!md_ctx) {
+        std::cerr << "Failed to create signature context" << std::endl;
+        return std::nullopt;
+    }
+    #endif
+    
+    // Initialize the signature operation with provided digest
+    if (EVP_DigestSignInit(md_ctx, nullptr, md, nullptr, private_key) != 1) {
+        std::cerr << "Failed to initialize signature operation" << std::endl;
+        #if OPENSSL_VERSION_NUMBER < 0x10100000L
+        EVP_MD_CTX_cleanup(md_ctx);
+        #else
+        EVP_MD_CTX_free(md_ctx);
+        #endif
+        return std::nullopt;
+    }
+    
+    // Provide the data to be signed
+    if (EVP_DigestSignUpdate(md_ctx, data_to_sign.data(), data_to_sign.size()) != 1) {
+        std::cerr << "Failed to update signature data" << std::endl;
+        #if OPENSSL_VERSION_NUMBER < 0x10100000L
+        EVP_MD_CTX_cleanup(md_ctx);
+        #else
+        EVP_MD_CTX_free(md_ctx);
+        #endif
+        return std::nullopt;
+    }
+    
+    // Determine the signature length
+    size_t sig_len = 0;
+    if (EVP_DigestSignFinal(md_ctx, nullptr, &sig_len) != 1) {
+        std::cerr << "Failed to determine signature length" << std::endl;
+        #if OPENSSL_VERSION_NUMBER < 0x10100000L
+        EVP_MD_CTX_cleanup(md_ctx);
+        #else
+        EVP_MD_CTX_free(md_ctx);
+        #endif
+        return std::nullopt;
+    }
+    
+    // Get the signature
+    std::vector<uint8_t> signature(sig_len);
+    if (EVP_DigestSignFinal(md_ctx, signature.data(), &sig_len) != 1) {
+        std::cerr << "Failed to create signature" << std::endl;
+        #if OPENSSL_VERSION_NUMBER < 0x10100000L
+        EVP_MD_CTX_cleanup(md_ctx);
+        #else
+        EVP_MD_CTX_free(md_ctx);
+        #endif
+        return std::nullopt;
+    }
+    
+    // Resize in case the actual signature is smaller than the buffer
+    signature.resize(sig_len);
+    
+    // Clean up
+    #if OPENSSL_VERSION_NUMBER < 0x10100000L
+    EVP_MD_CTX_cleanup(md_ctx);
+    #else
+    EVP_MD_CTX_free(md_ctx);
+    #endif
+    
+    return signature;
+}
+
+std::pair<uint8_t*,size_t> em_crypto_t::base64_decode(const std::string& input) {
+    BIO *bio, *b64;
+    uint8_t* result = static_cast<uint8_t*> (malloc(input.size()));
+
+    bio = BIO_new_mem_buf(input.c_str(), -1);
+    b64 = BIO_new(BIO_f_base64());
+    bio = BIO_push(b64, bio);
+
+    BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
+    int output_length = BIO_read(bio, result, static_cast<int> (input.size()));
+    
+    if (output_length <= 0){
+        free(result);
+        result = NULL;
+        // Used as standard NULL length output
+        output_length = 0;
+    }
+
+    // Free the BIO chain
+    BIO_free_all(bio);
+
+    return {result, static_cast<size_t> (output_length)};
+}
 
 void em_crypto_t::cleanup_bignums(BIGNUM *p, BIGNUM *g, BIGNUM *priv, BIGNUM *pub) {
     BN_clear_free(p);
@@ -752,70 +955,6 @@ uint8_t em_crypto_t::compute_secret_internal(BIGNUM *p, BIGNUM *g, BIGNUM *bn_pr
     return (*secret_len > 0) ? 1 : 0;
 }
 #endif
-
-char *em_crypto_t::base64_encode(const uint8_t *input, size_t length, size_t *output_length) {
-    BIO *bio, *b64;
-
-    // Create a base64 filter BIO and a memory BIO
-    b64 = BIO_new(BIO_f_base64());
-    bio = BIO_new(BIO_s_mem());
-    bio = BIO_push(b64, bio);  // Chain them together
-
-    // Disable newlines in the output
-    BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
-    
-    // Write data through the BIO chain
-    BIO_write(bio, input, static_cast<int> (length));
-    BIO_flush(bio);
-
-    // Extract the encoded data
-
-    size_t temp_out_length = 0;
-    char* data_ptr = NULL;
-
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
-    BUF_MEM *bufferPtr;
-    BIO_get_mem_ptr(bio, &bufferPtr);
-    temp_out_length = bufferPtr->length;
-    data_ptr = bufferPtr->data; 
-#elif OPENSSL_VERSION_NUMBER < 0x30000000L
-    const BUF_MEM *bptr;
-    BIO_get_mem_ptr(bio, &bptr);
-    temp_out_length = bptr->length;
-    data_ptr = bptr->data;
-#else
-    temp_out_length = static_cast<size_t> (BIO_get_mem_data(bio, &data_ptr));
-#endif
-
-    // Allocate and copy the encoded data
-    char* result = static_cast<char*> (malloc(temp_out_length + 1));
-    memcpy(result, data_ptr, temp_out_length);
-    result[temp_out_length] = '\0';
-
-    if (output_length) {
-        *output_length = temp_out_length;
-    }
-    BIO_free_all(bio);
-    return result;
-}
-
-uint8_t* em_crypto_t::base64_decode(const char* input, size_t length, size_t* output_length) {
-    BIO *bio, *b64;
-    unsigned char* result;
-
-    result = static_cast<unsigned char*> (malloc(length));
-    bio = BIO_new_mem_buf(input, -1);
-    b64 = BIO_new(BIO_f_base64());
-    bio = BIO_push(b64, bio);
-
-    BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
-    *output_length = static_cast<size_t> (BIO_read(bio, result, static_cast<int> (length)));
-
-    // Free the BIO chain
-    BIO_free_all(bio);
-
-    return result;
-}
 
 SSL_KEY* em_crypto_t::create_ec_key_from_base64_der(const char* base64_der_pubkey) 
 {
