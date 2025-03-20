@@ -32,6 +32,7 @@
 #include <optional>
 #include <vector>
 #include <utility>
+#include <string>
 
 #define SHA256_MAC_LEN 32
 #define AES_BLOCK_SIZE 16

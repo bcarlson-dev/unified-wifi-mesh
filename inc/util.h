@@ -27,8 +27,10 @@
 #include "wifi_hal.h"
 #include <pthread.h>
 #include <sys/prctl.h>
+
 #include <string>
 #include <memory>
+#include <vector>
 
 #ifndef LOG_PATH_PREFIX
 #define LOG_PATH_PREFIX "/nvram/"
@@ -72,6 +74,8 @@ inline std::string mac_to_string(const uint8_t mac[6], const std::string& delim 
              mac[3], delim.c_str(), mac[4], delim.c_str(), mac[5]);
     return std::string(mac_str);
 }
+
+std::vector<std::string> split(const std::string& s, char delimiter);
 
 /**
  * em_chan_to_freq - Convert channel info to frequency
