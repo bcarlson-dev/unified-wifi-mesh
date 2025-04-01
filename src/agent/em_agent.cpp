@@ -717,7 +717,7 @@ bool em_agent_t::send_action_frame(uint8_t dest_mac[ETH_ALEN], uint8_t *action_f
     bus_error_t rc;
     if ((rc = desc->bus_set_fn(&m_bus_hdl, path,  &raw_act_frame)) != 0) {
         if (rc == bus_error_destination_not_found) test_idx++;
-        if (test_idx > 255) test_idx = 0;
+        if (test_idx-1 > 255) test_idx = 0;
         printf("%s:%d bus set failed (%d)\n", __func__, __LINE__, rc);
         free(act_frame_params);
         return false;
