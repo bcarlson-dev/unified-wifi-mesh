@@ -596,13 +596,13 @@ bool ec_ctrl_configurator_t::handle_auth_response(ec_frame_t *frame, size_t len,
         e_ctx->l = L_x;
     }
 
-    e_ctx->k1 = static_cast<uint8_t *>(calloc(conn_ctx->digest_len, 1));
+    e_ctx->ke = static_cast<uint8_t *>(calloc(conn_ctx->digest_len, 1));
     if (ec_crypto::compute_ke(*conn_ctx, e_ctx, e_ctx->ke) == 0) {
         em_printfout("Failed to compute ke");
         free(prim_unwrapped_data);
         return false;
     }
-    em_printfout("Key K_e:\n");
+    printf("Key K_e:\n");
     util::print_hex_dump(conn_ctx->digest_len, e_ctx->ke);
 
     // Get secondary wrapped data from inside the primary wrapped data component

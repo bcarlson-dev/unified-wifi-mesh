@@ -771,6 +771,9 @@ std::pair<uint8_t *, size_t> ec_enrollee_t::create_auth_response(ec_status_code_
         return {};
     }
 
+    printf("Key K_e:\n");
+    util::print_hex_dump(m_c_ctx.digest_len, m_eph_ctx().ke);
+
     // Compute R-auth = H(I-nonce | R-nonce | PI.x | PR.x | [ BI.x | ] BR.x | 0)
     BIGNUM* P_I_x = ec_crypto::get_ec_x(m_c_ctx, m_eph_ctx().public_init_proto_key);
     BIGNUM* P_R_x = ec_crypto::get_ec_x(m_c_ctx, m_eph_ctx().public_resp_proto_key);
