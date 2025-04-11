@@ -184,12 +184,7 @@ uint8_t* ec_util::add_wrapped_data_attr(ec_frame_t *frame, uint8_t* frame_attrib
     return add_wrapped_data_attr(reinterpret_cast<uint8_t*>(frame), sizeof(ec_frame_t), frame_attribs, non_wrapped_len, use_aad, key, create_wrap_attribs);
 }
 
-std::pair<uint8_t*, uint16_t> ec_util::unwrap_wrapped_attrib(ec_attribute_t* wrapped_attrib, ec_frame_t *frame, bool uses_aad, uint8_t* key)
-{
-    return unwrap_wrapped_attrib(wrapped_attrib, reinterpret_cast<uint8_t*>(frame), sizeof(ec_frame_t), frame->attributes, uses_aad, key);
-}
-
-std::pair<uint8_t*, uint16_t> ec_util::unwrap_wrapped_attrib(ec_attribute_t *wrapped_attrib, uint8_t *frame, size_t frame_len, uint8_t *frame_attribs, bool uses_aad, uint8_t *key)
+std::pair<uint8_t*, uint16_t> ec_util::unwrap_wrapped_attrib(ec_attribute_t *wrapped_attrib, uint8_t *frame, size_t frame_len, uint8_t *frame_attribs, size_t pre_wrapped_attribs_size, bool uses_aad, uint8_t *key)
 {
     siv_ctx ctx;
 
@@ -226,7 +221,6 @@ std::pair<uint8_t*, uint16_t> ec_util::unwrap_wrapped_attrib(ec_attribute_t *wra
             em_printfout("AAD input is NULL, AAD decryption failed!");
             return {nullptr, 0};
         }
-        size_t pre_wrapped_attribs_size = static_cast<size_t>(reinterpret_cast<uint8_t*>(wrapped_attrib) - frame_attribs);
         result = siv_decrypt(&ctx, wrapped_ciphertext, unwrap_attribs, wrapped_len,
                              wrapped_attrib->data, 2,
                              frame, frame_len,
