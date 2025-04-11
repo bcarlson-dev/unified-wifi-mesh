@@ -565,6 +565,9 @@ bool ec_ctrl_configurator_t::handle_auth_response(ec_frame_t *frame, size_t len,
 
         // Perform **Initiator** L.x calculation (L = bI * (BR + PR))
 
+        // b_I
+        ASSERT_NOT_NULL(conn_ctx->boot_data.init_priv_boot_key, false, "%s:%d: failed to get initiator bootstrapping private key\n", __func__, __LINE__);
+
         EC_POINT* sum = EC_POINT_new(conn_ctx->group);
         // Calculate (B_R + P_R)
         if (!EC_POINT_add(conn_ctx->group, sum, conn_ctx->boot_data.resp_pub_boot_key, e_ctx->public_resp_proto_key, conn_ctx->bn_ctx)){
@@ -599,6 +602,8 @@ bool ec_ctrl_configurator_t::handle_auth_response(ec_frame_t *frame, size_t len,
         free(prim_unwrapped_data);
         return false;
     }
+    em_printfout("Key K_e:\n");
+    util::print_hex_dump(conn_ctx->digest_len, e_ctx->ke);
 
     // Get secondary wrapped data from inside the primary wrapped data component
     //  EasyConnect 8.2.3
@@ -607,7 +612,8 @@ bool ec_ctrl_configurator_t::handle_auth_response(ec_frame_t *frame, size_t len,
     ASSERT_NOT_NULL_FREE(sec_wrapped_attr, false, prim_unwrapped_data, "%s:%d: No secondary wrapped data attribute found\n", __func__, __LINE__);
 
     // Unwrap the secondary wrapped data with the KE key
-    auto [sec_unwrapped_data, sec_unwrapped_len] =  ec_util::unwrap_wrapped_attrib(sec_wrapped_attr, frame, true, e_ctx->ke);
+    size_t pre_wrapped_attribs_size = ((uint8_t*)prim_wrapped_attr - (uint8_t*)frame) + ((uint8_t*)sec_wrapped_attr - (uint8_t*)prim_unwrapped_data);
+    auto [sec_unwrapped_data, sec_unwrapped_len] =  ec_util::unwrap_wrapped_attrib(sec_wrapped_attr, reinterpret_cast<uint8_t*>(frame), sizeof(ec_frame_t), frame->attributes, pre_wrapped_attribs_size, true, e_ctx->ke);
     ASSERT_NOT_NULL_FREE(sec_unwrapped_data, false, prim_unwrapped_data, "%s:%d: Failed to unwrap secondary wrapped data\n", __func__, __LINE__);
 
     // Free the primary unwrapped data since it is no longer needed (secondary unwrapped data is heap allocated)

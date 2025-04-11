@@ -532,7 +532,10 @@ public:
 	 *
 	 * @note Forwards to `unwrap_wrapped_attrib(ec_attribute_t *wrapped_attrib, uint8_t *frame, size_t frame_len, uint8_t *frame_attribs, bool uses_aad, uint8_t *key);`
 	 */
-	static std::pair<uint8_t*, uint16_t> unwrap_wrapped_attrib(ec_attribute_t* wrapped_attrib, ec_frame_t *frame, bool uses_aad, uint8_t* key);
+	static inline std::pair<uint8_t*, uint16_t> unwrap_wrapped_attrib(ec_attribute_t* wrapped_attrib, ec_frame_t *frame, bool uses_aad, uint8_t* key) {
+		size_t pre_wrapped_attribs_size = static_cast<size_t>(reinterpret_cast<uint8_t*>(wrapped_attrib) - frame->attributes);
+		return unwrap_wrapped_attrib(wrapped_attrib, reinterpret_cast<uint8_t*>(frame), sizeof(ec_frame_t), frame->attributes, pre_wrapped_attribs_size, uses_aad, key);
+	}
 
     
 	/**
@@ -543,7 +546,7 @@ public:
 	 * @param[in] wrapped_attrib The wrapped attribute to unwrap (retrieved using `get_attribute`).
 	 * @param[in] frame The frame to use as AAD. Can be nullptr if `uses_aad` is false.
 	 * @param[in] frame_len The length of the frame.
-	 * @param[out] frame_attribs Pointer to the attributes to unwrap.
+	 * @param[in] frame_attribs Pointer to the attributes to unwrap.
 	 * @param[in] uses_aad Whether the wrapped attribute uses AAD.
 	 * @param[in] key The key to use for decryption.
 	 *
@@ -551,7 +554,29 @@ public:
 	 *
 	 * @note Ensure that the key is valid and the frame is correctly set up before calling this function.
 	 */
-	static std::pair<uint8_t*, uint16_t> unwrap_wrapped_attrib(ec_attribute_t *wrapped_attrib, uint8_t *frame, size_t frame_len, uint8_t *frame_attribs, bool uses_aad, uint8_t *key);
+	static inline std::pair<uint8_t*, uint16_t> unwrap_wrapped_attrib(ec_attribute_t *wrapped_attrib, uint8_t *frame, size_t frame_len, uint8_t *frame_attribs, bool uses_aad, uint8_t *key) {
+		size_t pre_wrapped_attribs_size = static_cast<size_t>(reinterpret_cast<uint8_t*>(wrapped_attrib) - frame_attribs);
+		return unwrap_wrapped_attrib(wrapped_attrib, frame, frame_len, frame_attribs, pre_wrapped_attribs_size, uses_aad, key);
+	}
+
+	/**
+	 * @brief Unwrap a wrapped data attribute.
+	 *
+	 * This function attempts to unwrap a given wrapped attribute using the provided frame and key.
+	 *
+	 * @param[in] wrapped_attrib The wrapped attribute to unwrap (retrieved using `get_attribute`).
+	 * @param[in] frame The frame to use as AAD. Can be nullptr if `uses_aad` is false.
+	 * @param[in] frame_len The length of the frame.
+	 * @param[in] frame_attribs Pointer to the attributes to unwrap.
+	 * @param[in] pre_wrapped_attribs_size The size of the attributes buffer before this attribute
+	 * @param[in] uses_aad Whether the wrapped attribute uses AAD.
+	 * @param[in] key The key to use for decryption.
+	 *
+	 * @return std::pair<uint8_t*, uint16_t> The unwrapped attributes and their size on success, nullptr & 0 otherwise.
+	 *
+	 * @note Ensure that the key is valid and the frame is correctly set up before calling this function.
+	 */
+	static std::pair<uint8_t*, uint16_t> unwrap_wrapped_attrib(ec_attribute_t *wrapped_attrib, uint8_t *frame, size_t frame_len, uint8_t *frame_attribs, size_t pre_wrapped_attribs_size, bool uses_aad, uint8_t *key);
 
     // Used for storing channels / op-classes searched when looking for a given SSID.
     struct scanned_channels_t {
