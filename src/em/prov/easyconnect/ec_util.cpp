@@ -211,6 +211,23 @@ std::pair<uint8_t*, uint16_t> ec_util::unwrap_wrapped_attrib(ec_attribute_t *wra
     }
     */
 
+    if (wrapped_attrib == NULL || wrapped_attrib->length == 0) {
+        em_printfout("Invalid input");
+        return {nullptr, 0};
+    }
+    if (wrapped_attrib->length < AES_BLOCK_SIZE) {
+        em_printfout("Wrapped attribute length is less than AES block size");
+        return {nullptr, 0};
+    }
+    if (wrapped_attrib->attr_id != ec_attrib_id_wrapped_data) {
+        em_printfout("Wrapped attribute ID is not correct");
+        return {nullptr, 0};
+    }
+    if (wrapped_attrib->data == NULL) {
+        em_printfout("Wrapped attribute data is NULL");
+        return {nullptr, 0};
+    }
+
     uint8_t* wrapped_ciphertext = wrapped_attrib->data + AES_BLOCK_SIZE;
     uint16_t wrapped_len = wrapped_attrib->length - AES_BLOCK_SIZE;
 
