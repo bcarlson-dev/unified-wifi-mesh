@@ -41,13 +41,13 @@ INCLUDEDIRS = \
 	-I$(WIFI_CJSON) \
 
 
-CXXFLAGS = $(INCLUDEDIRS) -g -std=c++17 -fPIC
+CXXFLAGS = $(INCLUDEDIRS) -g -std=c++17 -fPIC `mariadb_config --include`
 CFLAGS = $(INCLUDEDIRS) -g
 LDFLAGS = $(LIBDIRS) $(LIBS)
 LIBDIRS = \
 	-L$(INSTALLDIR)/lib \
 
-LIBS = -lemcli -lm -lpthread -ldl -lcjson -lreadline -lssl -lcrypto
+LIBS = -lemcli -lm -lpthread -ldl -lcjson -lreadline -lssl -lcrypto `mariadb_config --libs`
 
 GENERIC_SOURCES = $(ONEWIFI_HOME)/source/utils/collection.c	\
                   $(ONEWIFI_EM_SRC)/util_crypto/aes_siv.c \
