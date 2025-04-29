@@ -19,7 +19,7 @@
  #ifndef DB_CLIENT_H
  #define DB_CLIENT_H
 
- #include <mariadb/mysql.h>  // MariaDB C client header
+ #include <mysql/mysql.h>  // MariaDB C client header
  
  /**!
   * @brief Database client class to manage database connections and queries.

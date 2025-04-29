@@ -41,13 +41,13 @@ INCLUDEDIRS = \
 	-I$(WIFI_CJSON) \
 
 
-CXXFLAGS = $(INCLUDEDIRS) -g -std=c++17 -fPIC `mariadb_config --include`
+CXXFLAGS = $(INCLUDEDIRS) -g -std=c++17 -fPIC -I$(STAGING_DIR)/usr/include
 CFLAGS = $(INCLUDEDIRS) -g
 LDFLAGS = $(LIBDIRS) $(LIBS)
 LIBDIRS = \
 	-L$(INSTALLDIR)/lib \
 
-LIBS = -lemcli -lm -lpthread -ldl -lcjson -lreadline -lssl -lcrypto `mariadb_config --libs`
+LIBS = -lemcli -lm -lpthread -ldl -lcjson -lreadline -lssl -lcrypto -I$(STAGING_DIR)/usr/lib -lmariadb
 
 GENERIC_SOURCES = $(ONEWIFI_HOME)/source/utils/collection.c	\
                   $(ONEWIFI_EM_SRC)/util_crypto/aes_siv.c \
@@ -101,11 +101,7 @@ $(MAIN_OBJECT): %.o: %.c
 
 $(PROGRAM):
 # use go 1.19 or above to build
-ifeq ($(CC), aarch64-linux-gnu-gcc-11)
-	CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -extldflags '-L$(INSTALLDIR)/lib -lcrypto -lssl -luuid'" -o $(PROGRAM) $(ONEWIFI_EM_SRC)/cli/*.go
-else
-	go build -ldflags="-extldflags '-L$(INSTALLDIR)/lib -lcrypto -lssl -luuid'" -o $(PROGRAM) $(ONEWIFI_EM_SRC)/cli/*.go
-endif
+	CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC=$(CC) CXX=$(CXX) go build -ldflags="-s -w -extldflags '-L$(INSTALLDIR)/lib -lcrypto -lssl -luuid'" -o $(PROGRAM) $(ONEWIFI_EM_SRC)/cli/*.go
 # Clean target: "make -f Makefile.Linux clean" to remove unwanted objects and executables.
 #
 
