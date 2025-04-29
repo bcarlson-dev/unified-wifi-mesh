@@ -47,7 +47,7 @@ LDFLAGS = $(LIBDIRS) $(LIBS)
 LIBDIRS = \
 	-L$(INSTALLDIR)/lib \
 
-LIBS = -lemcli -lm -lpthread -ldl -lcjson -lreadline -lssl -lcrypto -I$(STAGING_DIR)/usr/lib -lmariadb
+LIBS = -lemcli -luuid -lm -lpthread -ldl -lcjson -lreadline -lssl -lcrypto -I$(STAGING_DIR)/usr/lib -lmariadb
 
 GENERIC_SOURCES = $(ONEWIFI_HOME)/source/utils/collection.c	\
                   $(ONEWIFI_EM_SRC)/util_crypto/aes_siv.c \
@@ -88,7 +88,7 @@ MAIN_OBJECT = $(MAIN_SOURCE:.c=.o)
 all: $(EM_CLI_LIBRARY) $(PROGRAM)
 
 $(EM_CLI_LIBRARY): $(EMCLIOBJECTS)
-	$(CXX) -shared -o $@ $(EMCLIOBJECTS)
+	$(CXX) -shared -o $@ $(EMCLIOBJECTS) $(LDFLAGS)
 
 $(GENERIC_OBJECTS): %.o: %.c
 	$(CC) $(CXXFLAGS) -o $@ -c $<

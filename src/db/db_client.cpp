@@ -177,7 +177,7 @@
      
      // Connect to the database
      if (mysql_real_connect(m_con, 
-                           "127.0.0.1", 
+                           "localhost", 
                            username, 
                            password, 
                            NULL,        // Don't select database yet
