@@ -165,6 +165,22 @@ short em_channel_t::create_channel_pref_tlv(unsigned char *buff)
                     (op_class->m_op_class_info.id.type == em_op_class_type_anticipated)) == false) {
             continue;
         }
+
+        dm_op_class_t testing_opclass;
+        bool do_override = (op_class->m_op_class_info.channel == 36);
+
+        // OVERRIDE the opclass for 5G band
+        if (do_override){
+            
+            em_op_class_info_t    testing_opclass_info;
+            testing_opclass_info.op_class = 115;
+            testing_opclass_info.num_channels = 1;
+            testing_opclass_info.channels[0] = 44;
+            testing_opclass.m_op_class_info = testing_opclass_info;
+            op_class = &testing_opclass;
+        } else {
+            continue;
+        }
         
         pref_op_class->op_class = static_cast<unsigned char> (op_class->m_op_class_info.op_class);
         num_of_channel = op_class->m_op_class_info.num_channels;
@@ -183,6 +199,9 @@ short em_channel_t::create_channel_pref_tlv(unsigned char *buff)
         tmp += sizeof(unsigned char);
         pref_op_class = reinterpret_cast<em_channel_pref_op_class_t *> (tmp);
         pref->op_classes_num++;
+        if (do_override) {
+            break;
+        }
     }
     return len;
 }
