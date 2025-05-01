@@ -1,0 +1,40 @@
+{
+    "PhyList": [
+        {
+            "Index": 0,
+            "RadioList": [
+                {
+                    "Index": 0,
+                    "RadioName": "wlan0",
+                    "InterfaceList": [
+                        {
+                            "InterfaceName": "wlan0",
+                            "Bridge": "br-lan",
+                            "vlanId": 0,
+                            "vapIndex": 1,
+                            "vapName": "private_ssid_2g"
+                        }
+                    ]
+                }
+            ]
+        },
+	{
+            "Index": 1,
+            "RadioList": [
+                {
+                    "Index": 1,
+                    "RadioName": "wlan1",
+                    "InterfaceList": [
+                        {
+                            "InterfaceName": "wlan1",
+                            "Bridge": "br-lan",
+                            "vlanId": 0,
+                            "vapIndex": 0,
+                            "vapName": "mesh_backhaul_5g"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

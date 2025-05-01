@@ -1,0 +1,99 @@
+[~]$ iw dev
+phy#2
+	Interface wlan2
+		ifindex 14
+		wdev 0x200000001
+		addr 00:0c:43:26:60:12
+		type managed
+		txpower 23.00 dBm
+		multicast TXQ:
+			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
+			0	0	0	0	0	0	0	0		0
+phy#1
+	Interface wlan1.1
+		ifindex 23
+		wdev 0x100000002
+		addr 00:0c:43:26:80:ba
+		type managed
+		txpower 23.00 dBm
+		multicast TXQ:
+			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
+			0	0	0	0	0	0	0	0		0
+	Interface wlan1
+		ifindex 13
+		wdev 0x100000001
+		addr 00:0c:43:26:80:b8
+		ssid BPI_RDKB-AP0
+		type AP
+		channel 44 (5220 MHz), width: 80 MHz, center1: 5210 MHz
+		txpower 23.00 dBm
+		multicast TXQ:
+			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
+			0	0	0	0	0	0	0	0		0
+phy#0
+	Interface wlan0.1
+		ifindex 22
+		wdev 0x7
+		addr 00:0c:43:26:80:12
+		type managed
+		txpower 27.00 dBm
+		multicast TXQ:
+			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
+			0	0	0	0	0	0	0	0		0
+	Interface wifi1.1
+		ifindex 20
+		wdev 0x6
+		addr ea:c5:42:2b:7a:19
+		type managed
+		txpower 27.00 dBm
+		multicast TXQ:
+			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
+			0	0	0	0	0	0	0	0		0
+		4addr: on
+	Interface wifi2
+		ifindex 18
+		wdev 0x5
+		addr ea:c5:42:2b:7a:17
+		type AP
+		txpower 27.00 dBm
+		multicast TXQ:
+			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
+			0	0	0	0	0	0	0	0		0
+	Interface wifi0.1
+		ifindex 17
+		wdev 0x4
+		addr ea:c5:42:2b:7a:16
+		type managed
+		txpower 27.00 dBm
+		multicast TXQ:
+			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
+			0	0	0	0	0	0	0	0		0
+	Interface wifi1
+		ifindex 16
+		wdev 0x3
+		addr ea:c5:42:2b:7a:15
+		type AP
+		txpower 27.00 dBm
+		multicast TXQ:
+			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
+			0	0	0	0	0	0	0	0		0
+	Interface wifi0
+		ifindex 15
+		wdev 0x2
+		addr ea:c5:42:2b:7a:14
+		type AP
+		txpower 27.00 dBm
+		multicast TXQ:
+			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
+			0	0	0	0	0	0	0	0		0
+	Interface wlan0
+		ifindex 12
+		wdev 0x1
+		addr 00:0c:43:26:80:10
+		ssid BPI_RDKB-AP2
+		type AP
+		channel 1 (2412 MHz), width: 20 MHz, center1: 2412 MHz
+		txpower 27.00 dBm
+		multicast TXQ:
+			qsz-byt	qsz-pkt	flows	drops	marks	overlmt	hashcol	tx-bytes	tx-packets
+			0	0	0	0	0	0	0	0		0
