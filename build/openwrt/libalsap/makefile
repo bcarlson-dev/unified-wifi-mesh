@@ -1,4 +1,3 @@
-include ../makefile.inc
 
 AL_SAP_LIB = $(INSTALLDIR)/lib/libalsap.a
 CXXFLAGS = -I$(ONEWIFI_EM_HOME)/inc

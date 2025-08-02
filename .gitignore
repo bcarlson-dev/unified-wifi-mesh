@@ -6,3 +6,6 @@ install/bin/
 *.log
 DPPURI_sendable.json
 *.a
+.prepared
+.quilt_checked
+.source_dir
